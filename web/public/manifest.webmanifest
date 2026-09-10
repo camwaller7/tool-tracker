@@ -1,0 +1,13 @@
+{
+  "name": "Site Tool Tracker",
+  "short_name": "Tools",
+  "description": "Sign tools out and back in on the job site.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f172a",
+  "theme_color": "#0f766e",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
