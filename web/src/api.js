@@ -34,11 +34,13 @@ export const api = {
   },
 };
 
-// Build a src URL for a stored photo ref (strips the "local:" scheme; the
-// browser sends no Authorization header for <img>, so this only renders when
-// the server allows it — acceptable for MVP local dev, revisit with storage swap).
+// Build a src URL for a stored photo ref. In production the ref is a public
+// Vercel Blob https URL — use it directly. In local dev it's `local:<key>`
+// served back through /api/photos (token passed as a query param since <img>
+// can't send an Authorization header).
 export function photoUrl(ref) {
   if (!ref) return null;
+  if (/^https?:\/\//.test(ref)) return ref;
   const key = ref.startsWith('local:') ? ref.slice(6) : ref;
   const token = getToken();
   return `/api/photos/${key}${token ? `?t=${encodeURIComponent(token)}` : ''}`;

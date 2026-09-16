@@ -4,102 +4,99 @@ Job-site tool sign-out/return tracker for a small trades business. Mandatory
 photo-verified sign-out and return, live "who has what" lookup, and a full
 per-tool history — so tools stop going missing.
 
+It's a mobile-first **PWA**: open the link on a phone, "Add to Home Screen,"
+and it behaves like an installed app — no app store. A QR code just points at
+the deployed URL.
+
 This repo covers **Phase 1 (MVP)** and **Phase 2 (notifications & transfers)**
-from `ROADMAP.md`: the daily sign-out/return habit, plus the nightly overdue
-email digest, damage-alert SMS, and supervisor manual transfers. The
-accountability system (strikes → supervised → lock) is Phase 3. The database
-schema is already the full data model, so Phase 3 slots in without a migration
-rewrite.
+from `ROADMAP.md`. Phase 3 (strikes → supervised → lock, and the
+lost/stolen/broken register) is next; the database schema is already the full
+data model, so it slots in without a rewrite.
 
-## Stack (and why)
+## Stack
 
-The PRD recommends a Supabase-backed PWA. To keep this repo **runnable today
-with zero external provisioning** and portable, Phase 1 uses:
+Deployed **all on Vercel**:
 
-| Concern | Phase 1 choice | Swap path |
+| Concern | What | Notes |
 |---|---|---|
-| Backend | Node + Express | — |
-| Database | SQLite (via `better-sqlite3`) — a real, indexed relational DB | Point the data layer at Postgres/Supabase |
-| Auth | phone/email + PIN, JWT session, enforced server-side | Magic link / Supabase Auth |
-| Photo storage | local disk object store; DB holds only a reference | `server/src/storage.js` → S3 / Supabase Storage |
-| Frontend | React + Vite, mobile-first, installable PWA | — |
-
-These three items (auth method, DB/host, photo store) are the genuinely-open
-decisions from `CLAUDE.md`. The code isolates each behind one module so the
-decision can be changed without touching business logic.
+| Frontend | React + Vite PWA | static build served by Vercel |
+| API | Express, run as a Vercel serverless function | single catch-all function at `api/[...path].js` |
+| Database | Postgres (Vercel Postgres / Neon) | `pg`; connection from `POSTGRES_URL` |
+| Photos | Vercel Blob | DB stores only the blob URL; falls back to local disk in dev |
+| Auth | phone/email + PIN, JWT, enforced server-side | swappable |
+| Nightly job | Vercel Cron → `/api/cron/nightly` | daily overdue digest |
+| SMS / email | Twilio + SMTP | audit-logged; sends for real when creds are set |
 
 ## Running locally
 
+Needs Node 18+ and a local Postgres (or point `POSTGRES_URL` at any Postgres).
+
 ```bash
-# 1. Backend (port 4000)
-cd server
+# 0. Copy env and set POSTGRES_URL
+cp .env.example .env    # edit POSTGRES_URL if needed
+
+# 1. API (port 4000)
 npm install
-npm run seed      # creates tool-tracker.db with the Port Lincoln sample data
+npm run migrate         # create tables
+npm run seed            # Port Lincoln sample data
 npm run dev
 
 # 2. Frontend (port 5173, proxies /api to the backend)
-cd web
-npm install
-npm run dev
+cd web && npm install && npm run dev
 ```
 
-Open http://localhost:5173. Log in with any seeded person's phone/email and
-PIN (see the seed output, or `server/src/seed.js`). Default PIN for every
-seeded user is `1234`.
+Open http://localhost:5173. Everyone's PIN is `1234`.
 
-### Sample logins (from the seed)
-
-| Name | Role | Login | PIN |
-|---|---|---|---|
-| Cambell Waller | admin + supervisor | `0400000001` | `1234` |
-| Dave Nguyen | supervisor | `0400000002` | `1234` |
-| Sam Torres | employee | `0400000004` | `1234` |
-
-## What Phase 1 covers
-
-- Auth: employees, supervisors, admins log in (PIN), roles enforced server-side.
-- Admin: register tools, jobs (with supervisor assignment), and people/roles.
-- Employee sign-out wizard: job → supervisor → multi-select tools → one photo
-  per tool → confirm.
-- "My tools": everything currently signed out to you.
-- Return flow: mandatory photo → fine / issue → issue checkboxes → confirm.
-  A damaged/issue return automatically flags the tool unavailable.
-- Find-a-tool: search + live status (who has it, since when, which job).
-- Per-tool history: every sign-out/return in order, with photos.
-
-## What Phase 2 adds
-
-- **Nightly overdue digest** (`npm run nightly` in `server/`, or POST
-  `/api/notifications/run-nightly` as an admin, or the "Run end-of-day check"
-  button in the Notifications screen). Emails each supervisor the tools still
-  out under them. Schedule it at 6pm site-local via cron / an edge function.
-- **Damage-alert SMS** — a damaged/issue return immediately texts the
-  responsible supervisor.
-- **Supervisor manual transfer** — from a tool that's currently out, a
-  supervisor/admin reassigns responsibility to another person; logged in the
-  tool's history.
-- **Notifications feed** — supervisors see alerts sent to them; admins see all.
-
-### Notification delivery
-
-Every notification writes an audit row (`notification` table) regardless of
-delivery. Delivery is real when the relevant env vars are set, and logs to the
-console otherwise — so the app is fully functional in dev with nothing to
-configure. Set these to send for real (see `server/.env.example`):
-
-| Channel | Provider | Env vars |
+| Name | Role | Login |
 |---|---|---|
-| SMS | Twilio | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM` |
-| Email | SMTP (any) | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` |
+| Cambell Waller | admin + supervisor | `0400000001` |
+| Dave Nguyen | supervisor | `0400000002` |
+| Sam Torres | employee | `0400000004` |
+| Tom Fletcher | supervised employee | `0400000007` |
 
-Both live behind `server/src/notify.js` — swap the adapter, not the callers, to
-change provider.
+`npm run nightly` runs the overdue digest by hand.
+
+## Deploying to Vercel
+
+1. **Import the repo** into Vercel (or let the connected integration create the
+   project). No build settings needed — `vercel.json` handles build, output,
+   the API function, and the daily cron.
+2. **Add storage** (Vercel dashboard → the project → Storage):
+   - Create/connect a **Postgres** database → injects `POSTGRES_URL`.
+   - Create/connect a **Blob** store → injects `BLOB_READ_WRITE_TOKEN`.
+3. **Set env vars** (Settings → Environment Variables):
+   - `JWT_SECRET` — any long random string (required).
+   - `CRON_SECRET` — any long random string (protects the nightly cron).
+   - Optional: `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_FROM` for
+     real SMS; `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` /
+     `SMTP_FROM` for real email.
+4. **Redeploy.** The schema is created automatically on first request. To load
+   sample data, run `npm run seed` locally with `POSTGRES_URL` pointed at the
+   Vercel database (or start fresh and add real tools/people in the admin
+   screen).
+5. The production URL is your QR target.
+
+The cron in `vercel.json` runs daily at 08:00 UTC (~5:30–6:30pm Port Lincoln
+depending on daylight saving); adjust the schedule to taste.
+
+## What's covered
+
+**Phase 1** — auth (roles enforced server-side); admin registers tools, jobs
+(with supervisors), and people; sign-out wizard (job → supervisor → tools →
+photo per tool → confirm); "my tools"; return (photo → fine/issue → auto-flag
+damaged); find-a-tool with live status; per-tool photo history.
+
+**Phase 2** — nightly overdue email digest, damage-alert SMS, supervisor manual
+transfer, and a notifications feed. Every notification writes an audit row and
+sends for real when provider creds are configured (see `server/src/notify.js`).
 
 See `ROADMAP.md` for the full phase plan.
 
 ## Layout
 
 ```
-server/   Express API, SQLite schema + seed, photo object store
-web/      React PWA (Vite)
+api/[...path].js   Vercel serverless entry → the Express app
+server/src/        Express app, routes, Postgres layer, Blob storage, jobs
+web/               React PWA (Vite)
+vercel.json        build + function + cron config
 ```

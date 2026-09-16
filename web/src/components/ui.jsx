@@ -35,6 +35,25 @@ export function StatusBadge({ status }) {
   return <span className={`badge ${status}`}>{label}</span>;
 }
 
+// Downscale/compress a captured image to keep uploads small (fast on patchy
+// reception, and well under the serverless request-body limit). Falls back to
+// the original file if anything goes wrong.
+async function compressImage(file, maxDim = 1600, quality = 0.7) {
+  try {
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, maxDim / Math.max(bitmap.width, bitmap.height));
+    const w = Math.round(bitmap.width * scale);
+    const h = Math.round(bitmap.height * scale);
+    const canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    canvas.getContext('2d').drawImage(bitmap, 0, 0, w, h);
+    const blob = await new Promise((r) => canvas.toBlob(r, 'image/jpeg', quality));
+    return blob ? new File([blob], 'photo.jpg', { type: 'image/jpeg' }) : file;
+  } catch {
+    return file;
+  }
+}
+
 // Camera-first photo input. Opens the camera on mobile, uploads immediately,
 // and calls onChange(ref). Mandatory-photo enforcement lives in the parent.
 export function PhotoCapture({ value, onChange, label = 'Take photo' }) {
@@ -50,7 +69,8 @@ export function PhotoCapture({ value, onChange, label = 'Take photo' }) {
     setPreview(URL.createObjectURL(file));
     setBusy(true);
     try {
-      const ref = await api.uploadPhoto(file);
+      const compressed = await compressImage(file);
+      const ref = await api.uploadPhoto(compressed);
       onChange(ref);
     } catch (e2) {
       setErr(e2.message);

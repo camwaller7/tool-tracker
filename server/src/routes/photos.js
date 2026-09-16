@@ -14,12 +14,12 @@ const upload = multer({
 // Upload one photo, get back an opaque ref to store on a signout record.
 // The sign-out/return endpoints then submit plain JSON carrying these refs,
 // which lets photos upload in the background (PRD §7) independent of the form.
-router.post('/', requireAuth, upload.single('photo'), (req, res) => {
+router.post('/', requireAuth, upload.single('photo'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No photo provided' });
   if (!req.file.mimetype.startsWith('image/')) {
     return res.status(400).json({ error: 'File must be an image' });
   }
-  const ref = savePhoto(req.file.buffer, req.file.mimetype);
+  const ref = await savePhoto(req.file.buffer, req.file.mimetype);
   res.status(201).json({ ref });
 });
 

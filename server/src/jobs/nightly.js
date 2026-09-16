@@ -9,27 +9,25 @@
 // Run once daily at the site-local cutoff (PRD says 6pm). Examples:
 //   node src/jobs/nightly.js          # one-off / cron / edge function
 //   npm run nightly
-import db from '../db.js';
+import { q, pool } from '../db.js';
 import { notify } from '../notify.js';
 
 const hoursOut = (iso) => Math.max(1, Math.round((Date.now() - new Date(iso).getTime()) / 3600000));
 
 export async function runNightly() {
   // Every still-out tool, with who has it and which job.
-  const open = db
-    .prepare(
-      `SELECT s.id, s.supervisorId, s.signOutAt,
-              t.name AS toolName,
-              resp.name AS holderName,
-              j.name AS jobName
-       FROM signout s
-       JOIN tool t ON t.id = s.toolId
-       JOIN person resp ON resp.id = s.currentResponsible
-       JOIN job j ON j.id = s.jobId
-       WHERE s.returnAt IS NULL
-       ORDER BY s.supervisorId, s.signOutAt`
-    )
-    .all();
+  const open = await q.all(
+    `SELECT s."id", s."supervisorId", s."signOutAt",
+            t."name" AS "toolName",
+            resp."name" AS "holderName",
+            j."name" AS "jobName"
+     FROM signout s
+     JOIN tool t ON t."id" = s."toolId"
+     JOIN person resp ON resp."id" = s."currentResponsible"
+     JOIN job j ON j."id" = s."jobId"
+     WHERE s."returnAt" IS NULL
+     ORDER BY s."supervisorId", s."signOutAt"`
+  );
 
   if (open.length === 0) {
     console.log('[nightly] nothing out — no digests to send.');
@@ -67,6 +65,7 @@ export async function runNightly() {
 // Run directly when invoked as a script.
 if (import.meta.url === `file://${process.argv[1]}`) {
   runNightly()
+    .then(() => pool.end())
     .then(() => process.exit(0))
     .catch((e) => { console.error(e); process.exit(1); });
 }

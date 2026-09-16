@@ -1,4 +1,4 @@
-import db from './db.js';
+import { q } from './db.js';
 import { newId, now } from './util.js';
 
 // Notification layer. Every send writes one row to the `notification` table
@@ -69,10 +69,11 @@ function recipientAddress(person, channel) {
 // Core entry point. Always records the audit row; delivery failures are logged
 // but never throw to the caller (a failed text must not roll back a return).
 export async function notify({ type, channel, recipientId, subject, message }) {
-  const person = db.prepare('SELECT * FROM person WHERE id = ?').get(recipientId);
-  db.prepare(
-    'INSERT INTO notification (id, type, channel, recipient, message, at) VALUES (?, ?, ?, ?, ?, ?)'
-  ).run(newId('notif'), type, channel, recipientId, message, now());
+  const person = await q.one('SELECT * FROM person WHERE "id" = $1', [recipientId]);
+  await q.run(
+    'INSERT INTO notification ("id","type","channel","recipient","message","at") VALUES ($1,$2,$3,$4,$5,$6)',
+    [newId('notif'), type, channel, recipientId, message, now()]
+  );
 
   try {
     const addr = recipientAddress(person, channel);
