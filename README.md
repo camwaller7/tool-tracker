@@ -4,10 +4,12 @@ Job-site tool sign-out/return tracker for a small trades business. Mandatory
 photo-verified sign-out and return, live "who has what" lookup, and a full
 per-tool history — so tools stop going missing.
 
-This repo is **Phase 1 (MVP)** from `ROADMAP.md`: the daily sign-out/return
-habit, with no automation yet (notifications, transfers, and strikes are
-Phase 2+). The database schema is already the full data model, so later
-phases slot in without a migration rewrite.
+This repo covers **Phase 1 (MVP)** and **Phase 2 (notifications & transfers)**
+from `ROADMAP.md`: the daily sign-out/return habit, plus the nightly overdue
+email digest, damage-alert SMS, and supervisor manual transfers. The
+accountability system (strikes → supervised → lock) is Phase 3. The database
+schema is already the full data model, so Phase 3 slots in without a migration
+rewrite.
 
 ## Stack (and why)
 
@@ -64,6 +66,34 @@ seeded user is `1234`.
   A damaged/issue return automatically flags the tool unavailable.
 - Find-a-tool: search + live status (who has it, since when, which job).
 - Per-tool history: every sign-out/return in order, with photos.
+
+## What Phase 2 adds
+
+- **Nightly overdue digest** (`npm run nightly` in `server/`, or POST
+  `/api/notifications/run-nightly` as an admin, or the "Run end-of-day check"
+  button in the Notifications screen). Emails each supervisor the tools still
+  out under them. Schedule it at 6pm site-local via cron / an edge function.
+- **Damage-alert SMS** — a damaged/issue return immediately texts the
+  responsible supervisor.
+- **Supervisor manual transfer** — from a tool that's currently out, a
+  supervisor/admin reassigns responsibility to another person; logged in the
+  tool's history.
+- **Notifications feed** — supervisors see alerts sent to them; admins see all.
+
+### Notification delivery
+
+Every notification writes an audit row (`notification` table) regardless of
+delivery. Delivery is real when the relevant env vars are set, and logs to the
+console otherwise — so the app is fully functional in dev with nothing to
+configure. Set these to send for real (see `server/.env.example`):
+
+| Channel | Provider | Env vars |
+|---|---|---|
+| SMS | Twilio | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM` |
+| Email | SMTP (any) | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` |
+
+Both live behind `server/src/notify.js` — swap the adapter, not the callers, to
+change provider.
 
 See `ROADMAP.md` for the full phase plan.
 

@@ -13,6 +13,9 @@ export default function Home({ navigate, user }) {
     { name: 'mytools', icon: '📋', title: 'My tools', sub: outCount == null ? 'Return your tools' : `${outCount} out — return them` },
     { name: 'find', icon: '🔍', title: 'Find a tool', sub: 'Who has what, right now' },
   ];
+  if (user.roles.supervisor || user.roles.admin) {
+    tiles.push({ name: 'notifications', icon: '🔔', title: 'Notifications', sub: 'Overdue digests and damage alerts' });
+  }
   if (user.roles.admin) {
     tiles.push({ name: 'admin', icon: '⚙️', title: 'Admin', sub: 'Tools, jobs and people' });
   }

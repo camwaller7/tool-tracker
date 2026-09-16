@@ -24,11 +24,14 @@ for (const t of ['strike', 'registerEntry', 'notification', 'signout', 'job_supe
 
 function addPerson(name, phone, roles, status = 'active') {
   const id = newId('person');
+  // Email derived from name so the overdue-digest (email channel) has somewhere
+  // to go in the sample data.
+  const email = name.toLowerCase().replace(/[^a-z]+/g, '.') + '@portlincolntrades.example';
   db.prepare(
-    `INSERT INTO person (id, name, phone, pinHash, isEmployee, isSupervisor, isAdmin, status, supervisedUntil, createdAt)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO person (id, name, phone, email, pinHash, isEmployee, isSupervisor, isAdmin, status, supervisedUntil, createdAt)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
-    id, name, phone, hashPin(DEFAULT_PIN),
+    id, name, phone, email, hashPin(DEFAULT_PIN),
     roles.employee === false ? 0 : 1,
     roles.supervisor ? 1 : 0,
     roles.admin ? 1 : 0,

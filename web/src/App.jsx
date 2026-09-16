@@ -9,6 +9,7 @@ import ReturnTool from './pages/ReturnTool.jsx';
 import FindTool from './pages/FindTool.jsx';
 import ToolHistory from './pages/ToolHistory.jsx';
 import Admin from './pages/Admin.jsx';
+import Notifications from './pages/Notifications.jsx';
 
 const PAGES = {
   home: { title: 'Tool Tracker', Comp: Home },
@@ -18,6 +19,7 @@ const PAGES = {
   find: { title: 'Find a tool', Comp: FindTool },
   history: { title: 'Tool history', Comp: ToolHistory },
   admin: { title: 'Admin', Comp: Admin },
+  notifications: { title: 'Notifications', Comp: Notifications },
 };
 
 export default function App() {

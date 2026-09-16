@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import db from '../db.js';
-import { requireAuth, requireNotLocked } from '../middleware.js';
+import { requireAuth, requireNotLocked, requireSupervisor } from '../middleware.js';
 import { newId, now } from '../util.js';
+import { notify } from '../notify.js';
 
 const router = Router();
 
@@ -101,7 +102,7 @@ const ISSUE_LABELS = {
 // Body: { returnPhoto, condition: 'fine'|'issue', issues: [key], note }
 // Photo + condition both mandatory. A damaged/issue return auto-flags the
 // tool unavailable (ROADMAP Phase 1 — no admin step).
-router.post('/:id/return', requireAuth, (req, res) => {
+router.post('/:id/return', requireAuth, async (req, res) => {
   const { returnPhoto, condition, issues, note } = req.body || {};
   const so = db.prepare('SELECT * FROM signout WHERE id = ?').get(req.params.id);
   if (!so) return res.status(404).json({ error: 'Sign-out not found' });
@@ -158,8 +159,55 @@ router.post('/:id/return', requireAuth, (req, res) => {
   });
   tx();
 
+  // Damage auto-flag also texts the responsible supervisor immediately
+  // (PRD §4.8 / §6). Fire-and-forget: a failed SMS never fails the return.
+  if (condition === 'issue') {
+    const tool = db.prepare('SELECT name FROM tool WHERE id = ?').get(so.toolId);
+    await notify({
+      type: 'damage',
+      channel: 'sms',
+      recipientId: so.supervisorId,
+      message: `Tool Tracker: ${tool.name} returned with an issue by ${req.user.name}` +
+        `${notes ? ` — ${notes}` : ''}. It's been pulled from tomorrow's list until you resolve it.`,
+    });
+  }
+
   const tool = db.prepare('SELECT status FROM tool WHERE id = ?').get(so.toolId);
   res.json({ ok: true, toolStatus: tool.status });
+});
+
+// POST /api/signouts/:id/transfer  { toUserId }  — supervisor manual transfer
+// (PRD §4.6). Only supervisors/admins. Moves the return obligation to another
+// person; the original signer (userId) and sign-out photo/history stay intact.
+// Appended to the signout's `transferred` log and mirrored to tool.currentHolder.
+router.post('/:id/transfer', requireAuth, requireSupervisor, (req, res) => {
+  const { toUserId } = req.body || {};
+  if (!toUserId) return res.status(400).json({ error: 'toUserId required' });
+
+  const so = db.prepare('SELECT * FROM signout WHERE id = ?').get(req.params.id);
+  if (!so) return res.status(404).json({ error: 'Sign-out not found' });
+  if (so.returnAt) return res.status(409).json({ error: 'Tool already returned — nothing to transfer' });
+
+  const toPerson = db.prepare('SELECT * FROM person WHERE id = ?').get(toUserId);
+  if (!toPerson) return res.status(400).json({ error: 'Unknown person' });
+  if (toPerson.status === 'locked') return res.status(400).json({ error: 'That account is locked' });
+  if (toUserId === so.currentResponsible) {
+    return res.status(400).json({ error: 'Already responsible for this tool' });
+  }
+
+  const at = now();
+  const log = JSON.parse(so.transferred || '[]');
+  log.push({ from: so.currentResponsible, to: toUserId, by: req.user.id, at });
+
+  const tx = db.transaction(() => {
+    db.prepare('UPDATE signout SET currentResponsible = ?, transferred = ? WHERE id = ?')
+      .run(toUserId, JSON.stringify(log), so.id);
+    // Tool stays out; the holder changes.
+    db.prepare('UPDATE tool SET currentHolder = ? WHERE id = ?').run(toUserId, so.toolId);
+  });
+  tx();
+
+  res.json({ ok: true, currentResponsible: { id: toPerson.id, name: toPerson.name } });
 });
 
 export default router;
