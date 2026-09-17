@@ -10,6 +10,7 @@ import toolRoutes from './routes/tools.js';
 import signoutRoutes from './routes/signouts.js';
 import photoRoutes from './routes/photos.js';
 import notificationRoutes from './routes/notifications.js';
+import setupRoutes from './routes/setup.js';
 
 const app = express();
 app.use(cors());
@@ -48,6 +49,7 @@ app.use('/api/tools', toolRoutes);
 app.use('/api/signouts', signoutRoutes);
 app.use('/api/photos', photoRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/setup', setupRoutes);
 
 app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found' }));
 app.use((err, _req, res, _next) => {

@@ -81,7 +81,7 @@ async function returnedDamaged(toolId, userId, jobId, supervisorId, outAt, backA
     [id, toolId]);
 }
 
-async function main() {
+export async function seedDemo() {
   await ensureSchema();
   console.log('Clearing existing data…');
   await q.run('TRUNCATE notification, strike, "registerEntry", signout, job_supervisor, tool, job, person CASCADE');
@@ -132,9 +132,13 @@ async function main() {
   console.log('  Dave Nguyen    (supervisor)          0400000002');
   console.log('  Sam Torres     (employee)            0400000004');
   console.log('  Tom Fletcher   (supervised employee) 0400000007');
+  return { seeded: true };
 }
 
-main()
-  .then(() => pool.end())
-  .then(() => process.exit(0))
-  .catch((e) => { console.error(e); process.exit(1); });
+// Run directly as a script (npm run seed).
+if (import.meta.url === `file://${process.argv[1]}`) {
+  seedDemo()
+    .then(() => pool.end())
+    .then(() => process.exit(0))
+    .catch((e) => { console.error(e); process.exit(1); });
+}
