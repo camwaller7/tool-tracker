@@ -4,6 +4,9 @@
   "private": true,
   "type": "module",
   "description": "Site Tool Tracker — API + build (deployed on Vercel)",
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "dev": "node --env-file-if-exists=.env --watch server/src/index.js",
     "start": "node --env-file-if-exists=.env server/src/index.js",
