@@ -22,10 +22,13 @@ router.post('/', async (req, res, next) => {
     }
 
     await ensureSchema();
+    const force = req.query.force === 'true' || req.body?.force === true;
     const { count } = await q.one('SELECT count(*)::int AS count FROM person');
-    if (count > 0) {
-      return res.status(409).json({ error: 'Already initialized — setup is disabled once people exist.' });
+    if (count > 0 && !force) {
+      return res.status(409).json({ error: 'Already initialized. Pass ?force=true (with the secret) to wipe and re-initialize.' });
     }
+    // force + clean-admin mode needs an explicit wipe (demo mode wipes itself).
+    const wipe = () => q.run('TRUNCATE notification, strike, "registerEntry", signout, job_supervisor, tool, job, person CASCADE');
 
     // Demo mode: full sample dataset.
     if (req.query.demo === 'true' || req.body?.demo === true) {
@@ -47,6 +50,7 @@ router.post('/', async (req, res, next) => {
     if (!pin) return res.status(400).json({ error: 'pin required' });
     if (!phone && !email) return res.status(400).json({ error: 'phone or email required' });
 
+    if (force) await wipe();
     const id = newId('person');
     await q.run(
       `INSERT INTO person ("id","name","phone","email","pinHash","isEmployee","isSupervisor","isAdmin","status","createdAt")
